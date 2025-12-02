@@ -7,7 +7,8 @@ import {
   Settings, 
   LogOut, 
   ShieldCheck,
-  Menu
+  Menu,
+  BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -23,6 +24,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Orders', href: '/orders', icon: ListOrdered },
+    { name: 'Reports', href: '/reports', icon: BarChart3 },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 

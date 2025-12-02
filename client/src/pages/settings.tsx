@@ -4,16 +4,25 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, RefreshCw, ShieldCheck, Upload } from "lucide-react";
+import { Copy, RefreshCw, ShieldCheck, Upload, Plus, X, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 export default function SettingsPage() {
-  const { merchant } = useMockData();
+  const { merchant, addDomain, removeDomain } = useMockData();
   const { toast } = useToast();
+  const [newDomain, setNewDomain] = useState("");
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied", description: "Key copied to clipboard." });
+  };
+
+  const handleAddDomain = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDomain) return;
+    addDomain(newDomain);
+    setNewDomain("");
   };
 
   return (
@@ -50,6 +59,55 @@ export default function SettingsPage() {
             <Button variant="outline" className="mt-2">
               <RefreshCw className="mr-2 h-4 w-4" /> Regenerate Keys
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Domain Whitelisting</CardTitle>
+            <CardDescription>
+              Only requests from these domains will be allowed to create orders.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <form onSubmit={handleAddDomain} className="flex gap-2">
+              <div className="relative flex-1">
+                <Globe className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="example.com" 
+                  className="pl-9"
+                  value={newDomain}
+                  onChange={(e) => setNewDomain(e.target.value)}
+                />
+              </div>
+              <Button type="submit" disabled={!newDomain}>
+                <Plus className="h-4 w-4 mr-2" /> Add Domain
+              </Button>
+            </form>
+
+            <div className="space-y-2">
+              {merchant?.domains.map((domain) => (
+                <div key={domain} className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 w-2 rounded-full bg-green-500" />
+                    <span className="font-medium text-sm">{domain}</span>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => removeDomain(domain)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              {merchant?.domains.length === 0 && (
+                <div className="text-center py-4 text-sm text-muted-foreground border-2 border-dashed rounded-md">
+                  No domains whitelisted yet.
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

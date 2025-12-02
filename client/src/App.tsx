@@ -7,18 +7,28 @@ import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/auth";
 import DashboardPage from "@/pages/dashboard";
 import OrdersPage from "@/pages/orders";
+import ReportsPage from "@/pages/reports";
 import PaymentPage from "@/pages/payment";
 import SettingsPage from "@/pages/settings";
+import AdminDashboardPage from "@/pages/admin/dashboard";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
   const { merchant } = useMockData();
-  // In a real app, we'd check auth token. Here we check mock state.
-  // For mockup ease, if no merchant, redirect to login.
   
   if (!merchant) {
     return <Redirect to="/" />;
   }
   
+  return <Component {...rest} />;
+}
+
+function AdminRoute({ component: Component, ...rest }: any) {
+  const { merchant } = useMockData();
+
+  if (!merchant || merchant.role !== 'ADMIN') {
+    return <Redirect to="/" />;
+  }
+
   return <Component {...rest} />;
 }
 
@@ -35,8 +45,19 @@ function Router() {
       <Route path="/orders">
          <PrivateRoute component={OrdersPage} />
       </Route>
+      <Route path="/reports">
+         <PrivateRoute component={ReportsPage} />
+      </Route>
       <Route path="/settings">
          <PrivateRoute component={SettingsPage} />
+      </Route>
+
+      {/* Admin Routes */}
+      <Route path="/admin/dashboard">
+         <AdminRoute component={AdminDashboardPage} />
+      </Route>
+      <Route path="/admin/merchants">
+         <AdminRoute component={AdminDashboardPage} />
       </Route>
       
       <Route component={NotFound} />
