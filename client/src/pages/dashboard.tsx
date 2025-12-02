@@ -1,30 +1,56 @@
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/layout";
 import { useMockData } from "@/lib/mock-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatINR, formatDate } from "@/lib/utils";
-import { ArrowUpRight, CreditCard, Users, Activity } from "lucide-react";
+import { ArrowUpRight, CreditCard, Users, Activity, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
+
+interface DashboardData {
+  stats: {
+    total_volume: number;
+    success_rate: string;
+    pending_orders: number;
+    total_customers: number;
+  };
+  recent_orders: any[];
+}
 
 export default function DashboardPage() {
-  const { orders, merchant } = useMockData();
+  const { merchant } = useMockData();
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const totalVolume = orders
-    .filter(o => o.status === 'COMPLETED')
-    .reduce((acc, o) => acc + o.amount, 0);
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      const { data, error } = await api.getDashboard();
+      if (!error && data) {
+        setDashboardData(data);
+      }
+      setLoading(false);
+    };
+    
+    fetchDashboard();
+  }, []);
 
-  const successRate = orders.length > 0 
-    ? (orders.filter(o => o.status === 'COMPLETED').length / orders.length) * 100 
-    : 0;
-
-  const recentOrders = orders.slice(0, 5);
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const stats = [
-    { title: "Total Volume", value: formatINR(totalVolume), icon: CreditCard, change: "+12.5%" },
-    { title: "Success Rate", value: `${successRate.toFixed(1)}%`, icon: Activity, change: "+2.1%" },
-    { title: "Active Orders", value: orders.filter(o => o.status === 'PENDING').length, icon: ArrowUpRight, change: "+4" },
-    { title: "Total Customers", value: new Set(orders.map(o => o.customer_mobile)).size, icon: Users, change: "+12" },
+    { title: "Total Volume", value: formatINR(dashboardData?.stats.total_volume || 0), icon: CreditCard, change: "" },
+    { title: "Success Rate", value: `${dashboardData?.stats.success_rate || 0}%`, icon: Activity, change: "" },
+    { title: "Pending Orders", value: dashboardData?.stats.pending_orders || 0, icon: ArrowUpRight, change: "" },
+    { title: "Total Customers", value: dashboardData?.stats.total_customers || 0, icon: Users, change: "" },
   ];
 
   return (
@@ -50,9 +76,6 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">
-                {stat.change} from last month
-              </p>
             </CardContent>
           </Card>
         ))}
@@ -65,7 +88,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-8">
-              {recentOrders.map((order) => (
+              {(dashboardData?.recent_orders || []).map((order: any) => (
                 <div key={order.order_id} className="flex items-center">
                   <div className="space-y-1">
                     <p className="text-sm font-medium leading-none">
@@ -81,16 +104,16 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
-              {recentOrders.length === 0 && (
+              {(!dashboardData?.recent_orders || dashboardData.recent_orders.length === 0) && (
                 <div className="text-center py-8 text-muted-foreground">
-                  No transactions yet.
+                  No transactions yet. Create your first order to get started.
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
         <Card className="col-span-3">
-           <CardHeader>
+          <CardHeader>
             <CardTitle>System Status</CardTitle>
           </CardHeader>
           <CardContent>
@@ -103,12 +126,15 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                <span className="text-sm font-medium">Notification Lag</span>
-                <span className="text-sm text-muted-foreground">~120ms</span>
+                <span className="text-sm font-medium">API Status</span>
+                <span className="flex items-center text-sm text-green-600">
+                  <span className="block w-2 h-2 rounded-full bg-green-600 mr-2" />
+                  Operational
+                </span>
               </div>
-               <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                <span className="text-sm font-medium">Mapping Accuracy</span>
-                <span className="text-sm text-muted-foreground">100%</span>
+              <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+                <span className="text-sm font-medium">Order Expiry</span>
+                <span className="text-sm text-muted-foreground">2 minutes</span>
               </div>
             </div>
           </CardContent>

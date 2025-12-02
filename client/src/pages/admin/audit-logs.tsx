@@ -1,28 +1,54 @@
+import { useEffect, useState } from "react";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
-import { useState } from "react";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { Search, Loader2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { api } from "@/lib/api";
 
-const MOCK_LOGS = [
-  { id: 'log_1', action: 'LOGIN', actor: 'Mahesh Chargnew', ip: '192.168.1.1', timestamp: new Date(Date.now() - 300000).toISOString(), details: 'Successful login' },
-  { id: 'log_2', action: 'CREATE_ORDER', actor: 'Mahesh Chargnew', ip: '192.168.1.1', timestamp: new Date(Date.now() - 120000).toISOString(), details: 'Created Order #1000000003' },
-  { id: 'log_3', action: 'KYC_UPLOAD', actor: 'New Merchant', ip: '10.0.0.5', timestamp: new Date(Date.now() - 86400000).toISOString(), details: 'Uploaded PAN Card' },
-  { id: 'log_4', action: 'API_KEY_GEN', actor: 'System Admin', ip: '127.0.0.1', timestamp: new Date(Date.now() - 172800000).toISOString(), details: 'Regenerated API Secret for m_123456' },
-  { id: 'log_5', action: 'DOMAIN_ADD', actor: 'Mahesh Chargnew', ip: '192.168.1.1', timestamp: new Date(Date.now() - 200000).toISOString(), details: 'Whitelisted domain: shop.mysite.in' },
-];
+interface AuditLog {
+  id: string;
+  action: string;
+  actor: string;
+  actor_id: string | null;
+  ip_address: string | null;
+  details_json: any;
+  created_at: string;
+}
 
 export default function AuditLogsPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredLogs = MOCK_LOGS.filter(log => 
+  useEffect(() => {
+    const fetchLogs = async () => {
+      const { data, error } = await api.getAuditLogs({ limit: 100 });
+      if (!error && data) {
+        setLogs(data);
+      }
+      setLoading(false);
+    };
+    
+    fetchLogs();
+  }, []);
+
+  const filteredLogs = logs.filter(log => 
     log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.actor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.details.toLowerCase().includes(searchTerm.toLowerCase())
+    JSON.stringify(log.details_json).toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -57,7 +83,7 @@ export default function AuditLogsPage() {
               {filteredLogs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                    {formatDate(log.timestamp)}
+                    {formatDate(log.created_at)}
                   </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200 font-mono">
@@ -65,10 +91,19 @@ export default function AuditLogsPage() {
                     </span>
                   </TableCell>
                   <TableCell className="text-sm font-medium">{log.actor}</TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground">{log.ip}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{log.details}</TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">{log.ip_address || '-'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                    {log.details_json ? JSON.stringify(log.details_json).slice(0, 50) + '...' : '-'}
+                  </TableCell>
                 </TableRow>
               ))}
+              {filteredLogs.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    No audit logs found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

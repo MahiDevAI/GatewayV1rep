@@ -13,9 +13,22 @@ import PaymentPage from "@/pages/payment";
 import SettingsPage from "@/pages/settings";
 import AdminDashboardPage from "@/pages/admin/dashboard";
 import AuditLogsPage from "@/pages/admin/audit-logs";
+import { Loader2 } from "lucide-react";
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 function PrivateRoute({ component: Component, ...rest }: any) {
-  const { merchant } = useMockData();
+  const { merchant, isLoading } = useMockData();
+  
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
   
   if (!merchant) {
     return <Redirect to="/" />;
@@ -25,7 +38,11 @@ function PrivateRoute({ component: Component, ...rest }: any) {
 }
 
 function AdminRoute({ component: Component, ...rest }: any) {
-  const { merchant } = useMockData();
+  const { merchant, isLoading } = useMockData();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   if (!merchant || merchant.role !== 'ADMIN') {
     return <Redirect to="/" />;
@@ -41,32 +58,30 @@ function Router() {
       <Route path="/register" component={RegisterPage} />
       <Route path="/pay/:orderId" component={PaymentPage} />
       
-      {/* Protected Routes */}
       <Route path="/dashboard">
-         <PrivateRoute component={DashboardPage} />
+        <PrivateRoute component={DashboardPage} />
       </Route>
       <Route path="/orders">
-         <PrivateRoute component={OrdersPage} />
+        <PrivateRoute component={OrdersPage} />
       </Route>
       <Route path="/reports">
-         <PrivateRoute component={ReportsPage} />
+        <PrivateRoute component={ReportsPage} />
       </Route>
       <Route path="/settings">
-         <PrivateRoute component={SettingsPage} />
+        <PrivateRoute component={SettingsPage} />
       </Route>
 
-      {/* Admin Routes */}
       <Route path="/admin/dashboard">
-         <AdminRoute component={AdminDashboardPage} />
+        <AdminRoute component={AdminDashboardPage} />
       </Route>
       <Route path="/admin/merchants">
-         <AdminRoute component={AdminDashboardPage} />
+        <AdminRoute component={AdminDashboardPage} />
       </Route>
       <Route path="/admin/kyc">
-         <AdminRoute component={AdminDashboardPage} />
+        <AdminRoute component={AdminDashboardPage} />
       </Route>
-       <Route path="/admin/audit-logs">
-         <AdminRoute component={AuditLogsPage} />
+      <Route path="/admin/audit-logs">
+        <AdminRoute component={AuditLogsPage} />
       </Route>
       
       <Route component={NotFound} />
