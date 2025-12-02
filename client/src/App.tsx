@@ -1,16 +1,44 @@
-import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { Switch, Route, Redirect } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { MockDataProvider, useMockData } from "@/lib/mock-data";
 import NotFound from "@/pages/not-found";
+import LoginPage from "@/pages/auth";
+import DashboardPage from "@/pages/dashboard";
+import OrdersPage from "@/pages/orders";
+import PaymentPage from "@/pages/payment";
+import SettingsPage from "@/pages/settings";
+
+function PrivateRoute({ component: Component, ...rest }: any) {
+  const { merchant } = useMockData();
+  // In a real app, we'd check auth token. Here we check mock state.
+  // For mockup ease, if no merchant, redirect to login.
+  
+  if (!merchant) {
+    return <Redirect to="/" />;
+  }
+  
+  return <Component {...rest} />;
+}
 
 function Router() {
   return (
     <Switch>
-      {/* Add pages below */}
-      {/* <Route path="/" component={Home}/> */}
-      {/* Fallback to 404 */}
+      <Route path="/" component={LoginPage} />
+      <Route path="/pay/:orderId" component={PaymentPage} />
+      
+      {/* Protected Routes */}
+      <Route path="/dashboard">
+         <PrivateRoute component={DashboardPage} />
+      </Route>
+      <Route path="/orders">
+         <PrivateRoute component={OrdersPage} />
+      </Route>
+      <Route path="/settings">
+         <PrivateRoute component={SettingsPage} />
+      </Route>
+      
       <Route component={NotFound} />
     </Switch>
   );
@@ -19,10 +47,10 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
+      <MockDataProvider>
         <Router />
-      </TooltipProvider>
+        <Toaster />
+      </MockDataProvider>
     </QueryClientProvider>
   );
 }
