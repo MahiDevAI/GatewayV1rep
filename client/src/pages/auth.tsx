@@ -67,7 +67,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
         <CardFooter className="px-0 pt-6 justify-center text-sm text-muted-foreground">
-          Don't have an account? <Link href="/register"><a className="text-primary hover:underline ml-1">Create account</a></Link>
+          Don't have an account? <Link href="/register" className="text-primary hover:underline ml-1">Create account</Link>
         </CardFooter>
       </Card>
     </AuthLayout>

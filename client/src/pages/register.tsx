@@ -91,7 +91,7 @@ export default function RegisterPage() {
           </form>
         </CardContent>
         <CardFooter className="px-0 pt-6 justify-center text-sm text-muted-foreground">
-          Already have an account? <Link href="/"><a className="text-primary hover:underline ml-1">Sign in</a></Link>
+          Already have an account? <Link href="/" className="text-primary hover:underline ml-1">Sign in</Link>
         </CardFooter>
       </Card>
     </AuthLayout>
