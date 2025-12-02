@@ -1,0 +1,501 @@
+Understood, bro.
+**You will NOT receive UTR**,
+**You will NOT map UTR**,
+**You will ONLY receive your own 10-digit `order_id`** (from `tr` / `tn` inside the UPI notification text),
+and this will be the **only mapping key**.
+
+I will now generate a **full, clean, structured, AI-friendly SRS** that any developer or AI coding agent can directly use to build the entire backend, UI, APIs, DB, and flows.
+
+This will be the **final, production-grade Software Requirements Specification** written in an industry-standard structured format.
+
+---
+
+# **📘 SOFTWARE REQUIREMENTS SPECIFICATION (SRS)
+
+ChargePay – UPI Intent Payment Gateway (UPI-only, No Refund, No UTR)**
+**Version:** 1.0
+**Date:** Dec 2025
+**Prepared by:** Mahesh (Chargnew)
+
+---
+
+# **1. INTRODUCTION**
+
+## **1.1 Purpose**
+
+ChargePay is a custom UPI Intent–based payment gateway system that allows merchants to generate QR-based UPI payment requests and track payment success based entirely on **a unique 10-digit Order ID**, passed as UPI `tr` and `tn`.
+The system:
+
+* **Does not process or hold money**
+* **Does not receive UTR**
+* **Receives only notification text from a mobile listener**
+* **Maps transactions ONLY using the Order ID (10 digits)**
+* **Provides dashboards, reporting, multi-merchant login, and offline KYC uploads**
+
+## **1.2 Scope**
+
+The system covers:
+
+* Merchant registration + login
+* Offline KYC document upload (PAN + Aadhaar image)
+* Domain whitelisting
+* API key + HMAC authentication
+* Order creation API
+* UPI Intent URL generation using order_id as `tr` & `tn`
+* Client-side QR generation (with merchant logo)
+* QR upload endpoint
+* Mobile notification listener endpoint
+* Order lifecycle management
+* Reporting + dashboard
+* Full audit logging
+
+---
+
+# **2. SYSTEM OVERVIEW**
+
+## **2.1 High-Level Flow**
+
+1. **Merchant creates an account**
+2. Uploads logo + PAN + Aadhaar
+3. Whitelists their domain
+4. Generates API key
+5. Their client site calls `/orders` → gets UPI Intent URL
+6. UI generates QR (with logo), uploads it → order becomes PENDING
+7. User scans and pays
+8. Mobile listener app detects UPI notification and sends JSON payload
+9. Server extracts 10-digit order_id from notification
+10. If matched → order COMPLETED
+11. If late (>2 min) → EXPIRED
+12. Merchant views dashboard & reports
+
+---
+
+# **3. SYSTEM ACTORS**
+
+| Actor                   | Description                                                       |
+| ----------------------- | ----------------------------------------------------------------- |
+| **Merchant**            | Business user using ChargePay to create payment requests          |
+| **Client Website/App**  | Whitelisted domain making API calls                               |
+| **Mobile Listener App** | Android app reading UPI notifications & sending payload to server |
+| **Admin**               | Platform administrator                                            |
+| **System Backend**      | Core logic, DB, APIs, auditing                                    |
+
+---
+
+# **4. FUNCTIONAL REQUIREMENTS**
+
+# **4.1 Merchant Account Management**
+
+### FR-1 — User Registration
+
+* Email, Password, Mobile, Business Name
+
+### FR-2 — Merchant Login
+
+* JWT-based session
+* Password reset
+
+### FR-3 — KYC Upload
+
+* PAN image upload
+* Aadhaar image upload
+* Only store images, no verification needed
+* Store encrypted at rest
+
+### FR-4 — Logo Upload
+
+* Must be square
+* PNG/JPG
+* Used for embedding inside QR (client side)
+
+### FR-5 — Domain Whitelisting
+
+Merchant can add allowed domains:
+`example.com`, `app.partner.in`
+
+Only requests from these domains can create orders.
+
+### FR-6 — API Key Management
+
+* Generate API Key + API Secret
+* API Secret shown only once
+* Supports regeneration
+* Each API call must be signed using HMAC-SHA256
+
+---
+
+# **4.2 Order Management**
+
+### FR-7 — Order Creation API
+
+`POST /api/v1/orders`
+
+Merchant sends:
+
+* customer_name
+* customer_mobile
+* amount
+* receiver_upi_id
+* metadata (optional)
+
+**System:**
+
+* Validates domain
+* Verifies HMAC signature
+* Generates unique **10-digit order_id**
+* Generates UPI Intent URL:
+
+```
+upi://pay?pa=<upi_id>&pn=<merchant>&am=<amount>&tr=<order_id>&tn=<order_id>
+```
+
+* Creates order with status **CREATED**
+
+### FR-8 — QR Upload
+
+Client UI generates QR (client-side) using:
+
+* UPI URL
+* Merchant logo (center, fixed % size)
+
+Then calls:
+
+`POST /api/v1/qr/upload?order_id=XXXXXXXXXX`
+
+**System:**
+
+* Stores QR image (CDN / object storage)
+* Updates order status → **PENDING**
+* Stores `pending_at` timestamp
+
+### FR-9 — Order Expiry Rule
+
+If no payment notification is received within **2 minutes** after `pending_at`, system marks order:
+
+* FAILED (user-facing)
+* EXPIRED (internal state)
+
+### FR-10 — Order Status API
+
+`GET /api/v1/orders/{order_id}`
+
+Merchant receives:
+
+* Current status
+* QR URL
+* Transaction history
+* Timestamps for each state
+
+---
+
+# **4.3 Notification Listener (Mobile Client)**
+
+### FR-11 — Notification API
+
+`POST /api/v1/notifications`
+
+Payload example (actual notification JSON):
+
+```json
+{
+  "android.title": "Abishek P paid you ₹2.00",
+  "android.text": "1000123456",
+  "android.bigText": "1000123456"
+}
+```
+
+### FR-12 — Parsing Rules
+
+**Server must:**
+
+1. Extract payer name from `android.title` → UPIPayeeName
+2. Extract order_id from:
+
+   * `android.bigText`, else
+   * `android.text`
+3. NO UTR WILL BE RECEIVED OR PROCESSED
+4. If extracted `order_id` matches database:
+
+#### Case A — Order is PENDING and within 2 minutes
+
+→ Mark COMPLETED
+→ Store transaction record with fields:
+
+* payer_name
+* order_id
+* raw_notification_json
+* timestamp
+
+#### Case B — Order is PENDING but expired (>2 min)
+
+→ Keep order as EXPIRED
+→ Store transaction as a **Late Payment**
+
+#### Case C — No matching order_id
+
+→ Store payload in `unmapped_notifications` table
+→ Show on admin dashboard
+
+---
+
+# **4.4 Order Lifecycle**
+
+| Status        | Description                             |
+| ------------- | --------------------------------------- |
+| **CREATED**   | After order creation before QR upload   |
+| **PENDING**   | After QR uploaded to server             |
+| **COMPLETED** | Notification received within 2 minutes  |
+| **FAILED**    | Not paid within 2 minutes (user sees)   |
+| **EXPIRED**   | Internal flag = late payment or timeout |
+| **UNMAPPED**  | Notification without matching order_id  |
+
+---
+
+# **4.5 Reporting**
+
+### FR-13 — Merchant Dashboard
+
+* List orders
+* Filter by date, status, amount
+* View transaction details
+* Export CSV / Excel
+
+### FR-14 — Admin Dashboard
+
+* View merchants
+* View upload KYC
+* View unmapped notifications
+* Search audit logs
+
+---
+
+# **4.6 Audit Logging**
+
+Log the following:
+
+* API calls
+* Login events
+* API key generation
+* KYC uploads
+* QR uploads
+* Order status changes
+* Notification processing events
+
+Stored for minimum 12 months.
+
+---
+
+# **5. NON-FUNCTIONAL REQUIREMENTS**
+
+# **5.1 Security**
+
+* HTTPS required
+* API Key + HMAC Auth
+* Encrypt stored images (PAN/Aadhaar)
+* Validate domain on every API request
+* No UTR stored
+* Data retention: 12 months minimum
+* All logs timestamped with IST
+
+# **5.2 Performance**
+
+* Order creation response < 200 ms
+* Notification processing < 100 ms
+* System scales up to 10,000 orders/day without issues
+
+# **5.3 Availability**
+
+* 99.5% uptime
+* Graceful handling of node failures
+
+---
+
+# **6. TECHNICAL DESIGN REQUIREMENTS**
+
+# **6.1 Database Schema (High Level)**
+
+### merchants
+
+* id
+* name
+* email
+* phone
+* api_key
+* api_secret_hash
+* logo_path
+* kyc_pan_path
+* kyc_aadhaar_path
+* created_at
+
+### merchant_domains
+
+* merchant_id
+* domain
+
+### orders
+
+* order_id (10-digit numeric string)
+* merchant_id
+* customer_name
+* customer_mobile
+* amount
+* receiver_upi_id
+* status
+* created_at
+* pending_at
+* completed_at
+* expired_at
+* metadata (JSON)
+* qr_path
+
+### transactions
+
+* id
+* order_id
+* merchant_id
+* payer_name
+* notification_json (full payload)
+* is_late_payment (boolean)
+* created_at
+
+### unmapped_notifications
+
+* id
+* notification_json
+* received_at
+
+### audit_logs
+
+* id
+* actor (merchant/admin/system)
+* action
+* details_json
+
+---
+
+# **7. API AUTHENTICATION (FINAL CHOICE)**
+
+You weren’t sure in Q4, so I chose the **best, simplest, secure method**:
+
+## **API Key + HMAC-SHA256 Signature**
+
+Each merchant has:
+
+* `api_key`
+* `api_secret`
+
+Client includes:
+
+```
+Authorization: ApiKey <api_key>
+X-Signature: <HEX(HMAC_SHA256(api_secret, raw_body))>
+```
+
+Server recomputes signature → must match.
+
+---
+
+# **8. SYSTEM WORKFLOWS**
+
+# Workflow 1 — Create Payment Request
+
+1. Client sends order API
+2. Server validates domain + signature
+3. Generate 10-digit order_id
+4. Create UPI URL with order_id as tr/tn
+5. Return UPI Intent URL
+6. UI generates QR → uploads to server
+7. Server marks order = PENDING
+
+---
+
+# Workflow 2 — Payment Completion
+
+1. User pays using QR
+2. Mobile listener receives notification
+3. Sends payload to server
+4. Server extracts 10-digit number
+5. Matches order_id
+6. If within 2 minutes → COMPLETED
+7. Else → EXPIRED (late payment logged)
+
+---
+
+# **9. EXCEPTIONS & EDGE CASES**
+
+### Case 1 — Notification arrives twice
+
+→ First accepted, second ignored but logged.
+
+### Case 2 — Payment after 2 minutes
+
+→ Order remains EXPIRED, but late transaction logged.
+
+### Case 3 — Different amount paid
+
+→ Still treated as valid (mapping only via order_id as per your design)
+
+### Case 4 — Missing fields in notification
+
+If `bigText` missing → fall back to `android.text`.
+
+### Case 5 — Invalid domain
+
+→ HTTP 403 "Domain not allowed"
+
+### Case 6 — Invalid signature
+
+→ HTTP 401 "Invalid signature"
+
+---
+
+# **10. WHAT IS *NOT* INCLUDED**
+
+To avoid confusion:
+
+❌ No UTR
+❌ No settlement account
+❌ No refund API
+❌ No dynamic QR from bank
+❌ No webhook to client
+❌ No retry system for notifications (mobile app responsibility)
+
+---
+
+# **11. THINGS AI DEVELOPERS MUST FOLLOW**
+
+* Never attempt to validate UTR (not required)
+* Always extract `order_id` from notification text
+* Order matching logic must use **ONLY tr/tn (10-digit order_id)**
+* Expiry = 2 minutes after PENDING
+* Design should never store sensitive PAN/Aadhaar in plain text
+* API auth must always validate HMAC-SHA256
+
+---
+
+# **12. READY FOR DEVELOPMENT**
+
+This SRS is complete.
+It contains everything needed by:
+
+* Backend developers
+* API developers
+* Mobile listener app developers
+* Dashboard/frontend developers
+* AI coding agents (automatic implementation)
+
+---
+
+# ✅ If you want, I can generate next:
+
+1. **OpenAPI 3.1 (Swagger) full spec**
+2. **Database SQL migration scripts**
+3. **System architecture diagram**
+4. **Flowcharts (sequence diagrams)**
+5. **Folder structure for backend**
+6. **Admin panel + merchant dashboard UI wireframes**
+7. **Complete backend code (Node/Python/Go)**
+
+Just tell me **which one** you want next.
+
+
