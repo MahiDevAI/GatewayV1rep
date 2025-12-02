@@ -6,7 +6,8 @@ import {
   Users, 
   ShieldCheck,
   LogOut,
-  Menu
+  Menu,
+  FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -23,6 +24,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Merchants', href: '/admin/merchants', icon: Users },
     { name: 'KYC Approvals', href: '/admin/kyc', icon: ShieldCheck },
+    { name: 'Audit Logs', href: '/admin/audit-logs', icon: FileText },
   ];
 
   const SidebarContent = () => (

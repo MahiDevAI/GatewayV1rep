@@ -5,12 +5,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { MockDataProvider, useMockData } from "@/lib/mock-data";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/auth";
+import RegisterPage from "@/pages/register";
 import DashboardPage from "@/pages/dashboard";
 import OrdersPage from "@/pages/orders";
 import ReportsPage from "@/pages/reports";
 import PaymentPage from "@/pages/payment";
 import SettingsPage from "@/pages/settings";
 import AdminDashboardPage from "@/pages/admin/dashboard";
+import AuditLogsPage from "@/pages/admin/audit-logs";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
   const { merchant } = useMockData();
@@ -36,6 +38,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LoginPage} />
+      <Route path="/register" component={RegisterPage} />
       <Route path="/pay/:orderId" component={PaymentPage} />
       
       {/* Protected Routes */}
@@ -58,6 +61,12 @@ function Router() {
       </Route>
       <Route path="/admin/merchants">
          <AdminRoute component={AdminDashboardPage} />
+      </Route>
+      <Route path="/admin/kyc">
+         <AdminRoute component={AdminDashboardPage} />
+      </Route>
+       <Route path="/admin/audit-logs">
+         <AdminRoute component={AuditLogsPage} />
       </Route>
       
       <Route component={NotFound} />

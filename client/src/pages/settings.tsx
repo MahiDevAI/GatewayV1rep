@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, RefreshCw, ShieldCheck, Upload, Plus, X, Globe } from "lucide-react";
+import { Copy, RefreshCw, ShieldCheck, Upload, Plus, X, Globe, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 
@@ -25,11 +25,44 @@ export default function SettingsPage() {
     setNewDomain("");
   };
 
+  const handleLogoUpload = () => {
+      toast({ title: "Logo Uploaded", description: "Your merchant logo has been updated successfully." });
+  }
+
   return (
     <DashboardLayout>
       <h1 className="text-3xl font-heading font-bold tracking-tight mb-6">Settings</h1>
       
       <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Business Profile</CardTitle>
+            <CardDescription>
+              Manage your business identity and logo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-6">
+                <div className="h-20 w-20 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/30">
+                    {merchant?.logo_url ? (
+                        <img src={merchant.logo_url} alt="Logo" className="h-full w-full object-contain p-2" />
+                    ) : (
+                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                    )}
+                </div>
+                <div className="space-y-2">
+                    <Label>Merchant Logo</Label>
+                    <p className="text-xs text-muted-foreground">
+                        Upload a square logo (PNG/JPG) to be displayed on payment pages and QR codes.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={handleLogoUpload}>
+                        <Upload className="mr-2 h-4 w-4" /> Upload Logo
+                    </Button>
+                </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>API Credentials</CardTitle>
