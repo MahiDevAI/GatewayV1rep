@@ -9,21 +9,32 @@ import { AuthLayout } from "@/components/layout";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("demo@chargepay.in");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useMockData();
+  const { login, merchant } = useMockData();
   const [, setLocation] = useLocation();
+
+  if (merchant) {
+    if (merchant.role === 'ADMIN') {
+      setLocation("/admin/dashboard");
+    } else {
+      setLocation("/dashboard");
+    }
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      login(email);
-      setLoading(false);
+    
+    const success = await login(email, password);
+    
+    setLoading(false);
+    
+    if (success) {
       setLocation("/dashboard");
-    }, 800);
+    }
   };
 
   return (
@@ -51,7 +62,6 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <a href="#" className="text-xs text-primary hover:underline">Forgot password?</a>
               </div>
               <Input 
                 id="password" 

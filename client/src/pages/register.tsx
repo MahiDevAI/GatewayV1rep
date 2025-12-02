@@ -7,30 +7,38 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { AuthLayout } from "@/components/layout";
 import { Loader2 } from "lucide-react";
 import { useMockData } from "@/lib/mock-data";
-import { useToast } from "@/hooks/use-toast";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useMockData();
+  const { register, merchant } = useMockData();
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
+
+  if (merchant) {
+    setLocation("/dashboard");
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      // In a real app, we'd create the user. 
-      // Here we just mock login as a new user (using the default merchant for simplicity of the prototype)
-      login(email);
-      setLoading(false);
-      toast({ title: "Account Created", description: "Welcome to ChargePay!" });
+    
+    const success = await register({
+      name,
+      email,
+      password,
+      business_name: businessName,
+    });
+    
+    setLoading(false);
+    
+    if (success) {
       setLocation("/dashboard");
-    }, 1000);
+    }
   };
 
   return (
@@ -82,6 +90,8 @@ export default function RegisterPage() {
                 type="password" 
                 value={password} 
                 onChange={(e) => setPassword(e.target.value)} 
+                placeholder="Minimum 8 characters"
+                minLength={8}
                 required
               />
             </div>

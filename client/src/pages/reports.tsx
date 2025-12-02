@@ -1,36 +1,52 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout";
-import { useMockData } from "@/lib/mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatINR } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { CalendarIcon, Download, Filter } from "lucide-react";
+import { CalendarIcon, Download, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { api } from "@/lib/api";
+
+interface ReportsData {
+  summary: {
+    total_orders: number;
+    total_volume: number;
+    success_rate: number;
+  };
+  chart_data: {
+    date: string;
+    volume: number;
+    count: number;
+    success_rate: number;
+  }[];
+  orders: any[];
+}
 
 export default function ReportsPage() {
-  const { orders } = useMockData();
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [reportsData, setReportsData] = useState<ReportsData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Mock aggregation for charts
-  const data = [
-    { name: 'Mon', volume: 4000, success: 2400 },
-    { name: 'Tue', volume: 3000, success: 1398 },
-    { name: 'Wed', volume: 2000, success: 9800 },
-    { name: 'Thu', volume: 2780, success: 3908 },
-    { name: 'Fri', volume: 1890, success: 4800 },
-    { name: 'Sat', volume: 2390, success: 3800 },
-    { name: 'Sun', volume: 3490, success: 4300 },
-  ];
+  useEffect(() => {
+    const fetchReports = async () => {
+      const { data, error } = await api.getReports();
+      if (!error && data) {
+        setReportsData(data);
+      }
+      setLoading(false);
+    };
+    
+    fetchReports();
+  }, []);
 
   const downloadCSV = () => {
+    if (!reportsData?.orders) return;
+    
     const headers = ["Order ID,Customer Name,Amount,Status,Date"];
-    const rows = orders.map(o => 
+    const rows = reportsData.orders.map(o => 
       `${o.order_id},${o.customer_name},${o.amount},${o.status},${o.created_at}`
     );
     const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
@@ -40,7 +56,20 @@ export default function ReportsPage() {
     link.setAttribute("download", "chargepay_report.csv");
     document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const chartData = reportsData?.chart_data || [];
 
   return (
     <DashboardLayout>
@@ -50,7 +79,7 @@ export default function ReportsPage() {
           <p className="text-muted-foreground mt-1">Analyze your transaction volume and success rates.</p>
         </div>
         <div className="flex items-center gap-2">
-           <Popover>
+          <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="justify-start text-left font-normal">
                 <CalendarIcon className="mr-2 h-4 w-4" />
@@ -72,6 +101,33 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-3 mb-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Orders</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{reportsData?.summary.total_orders || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Volume</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatINR(reportsData?.summary.total_volume || 0)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Success Rate</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{(reportsData?.summary.success_rate || 0).toFixed(1)}%</div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -80,18 +136,24 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" className="text-xs" tickLine={false} axisLine={false} />
-                  <YAxis className="text-xs" tickLine={false} axisLine={false} tickFormatter={(value) => `₹${value}`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                    itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  />
-                  <Bar dataKey="volume" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="date" className="text-xs" tickLine={false} axisLine={false} />
+                    <YAxis className="text-xs" tickLine={false} axisLine={false} tickFormatter={(value) => `₹${value}`} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                      itemStyle={{ color: 'hsl(var(--foreground))' }}
+                    />
+                    <Bar dataKey="volume" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No data available yet. Create orders to see charts.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -103,18 +165,24 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data}>
-                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" className="text-xs" tickLine={false} axisLine={false} />
-                  <YAxis className="text-xs" tickLine={false} axisLine={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                    itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  />
-                  <Line type="monotone" dataKey="success" stroke="hsl(var(--chart-2))" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="date" className="text-xs" tickLine={false} axisLine={false} />
+                    <YAxis className="text-xs" tickLine={false} axisLine={false} domain={[0, 100]} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                      itemStyle={{ color: 'hsl(var(--foreground))' }}
+                    />
+                    <Line type="monotone" dataKey="success_rate" stroke="hsl(var(--chart-2))" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No data available yet. Create orders to see charts.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

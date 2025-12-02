@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { nanoid } from 'nanoid';
+import { api } from './api';
 
 export type OrderStatus = 'CREATED' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'EXPIRED';
 export type UserRole = 'MERCHANT' | 'ADMIN';
 
 export interface Order {
-  order_id: string; // 10-digit numeric string
+  order_id: string;
   merchant_id: string;
   customer_name: string;
   customer_mobile: string;
@@ -17,6 +17,7 @@ export interface Order {
   pending_at?: string;
   completed_at?: string;
   expired_at?: string;
+  upi_intent_url?: string;
 }
 
 export interface Merchant {
@@ -25,177 +26,259 @@ export interface Merchant {
   email: string;
   business_name: string;
   api_key: string;
-  api_secret: string;
+  api_secret?: string;
   logo_url: string;
   kyc_status: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_UPLOADED';
-  domains: string[];
+  kyc_pan_path?: boolean;
+  kyc_aadhaar_path?: boolean;
+  domains: { id: string; domain: string }[];
   role: UserRole;
 }
 
 interface MockDataContextType {
   merchant: Merchant | null;
   orders: Order[];
-  allMerchants: Merchant[]; // For Admin
-  login: (email: string) => Promise<void>;
+  allMerchants: Merchant[];
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (data: { name: string; email: string; password: string; business_name: string }) => Promise<boolean>;
   logout: () => void;
-  createOrder: (amount: number, name: string, mobile: string) => Promise<Order>;
+  createOrder: (amount: number, name: string, mobile: string, upiId?: string) => Promise<Order>;
   uploadQR: (orderId: string) => void;
   simulatePayment: (orderId: string) => void;
   simulateExpiry: (orderId: string) => void;
   getOrder: (orderId: string) => Order | undefined;
-  
-  // Domain Management
-  addDomain: (domain: string) => void;
-  removeDomain: (domain: string) => void;
-
-  // Admin Actions
+  refreshOrders: () => Promise<void>;
+  addDomain: (domain: string) => Promise<void>;
+  removeDomain: (domainId: string) => Promise<void>;
+  regenerateKeys: () => Promise<{ api_key: string; api_secret: string } | null>;
+  uploadLogo: (file: File) => Promise<void>;
+  uploadKycPan: (file: File) => Promise<void>;
+  uploadKycAadhaar: (file: File) => Promise<void>;
   createMerchant: (data: Partial<Merchant>) => Promise<void>;
-  updateKYCStatus: (merchantId: string, status: Merchant['kyc_status']) => void;
+  updateKYCStatus: (merchantId: string, status: Merchant['kyc_status']) => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  refreshAdminData: () => Promise<void>;
 }
 
 const MockDataContext = createContext<MockDataContextType | undefined>(undefined);
 
-const MOCK_MERCHANT: Merchant = {
-  id: 'm_123456',
-  name: 'Mahesh Chargnew',
-  email: 'demo@chargepay.in',
-  business_name: 'ChargePay Demo Merchant',
-  api_key: 'cp_live_8374928374',
-  api_secret: 'sk_live_998877665544332211',
-  logo_url: '',
-  kyc_status: 'VERIFIED',
-  domains: ['example.com', 'shop.mysite.in'],
-  role: 'MERCHANT'
-};
-
-const MOCK_ADMIN: Merchant = {
-  id: 'admin_001',
-  name: 'System Admin',
-  email: 'admin@chargepay.in',
-  business_name: 'ChargePay Admin',
-  api_key: '',
-  api_secret: '',
-  logo_url: '',
-  kyc_status: 'VERIFIED',
-  domains: [],
-  role: 'ADMIN'
-};
-
-const INITIAL_ORDERS: Order[] = [
-  {
-    order_id: '1000000001',
-    merchant_id: 'm_123456',
-    customer_name: 'Rahul Kumar',
-    customer_mobile: '9876543210',
-    amount: 150.00,
-    receiver_upi_id: 'merchant@upi',
-    status: 'COMPLETED',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    pending_at: new Date(Date.now() - 86390000).toISOString(),
-    completed_at: new Date(Date.now() - 86350000).toISOString(),
-  },
-  {
-    order_id: '1000000002',
-    merchant_id: 'm_123456',
-    customer_name: 'Priya Singh',
-    customer_mobile: '9876543211',
-    amount: 500.00,
-    receiver_upi_id: 'merchant@upi',
-    status: 'EXPIRED',
-    created_at: new Date(Date.now() - 43200000).toISOString(),
-    pending_at: new Date(Date.now() - 43190000).toISOString(),
-    expired_at: new Date(Date.now() - 43000000).toISOString(),
-  },
-   {
-    order_id: '1000000003',
-    merchant_id: 'm_123456',
-    customer_name: 'Amit Sharma',
-    customer_mobile: '9988776655',
-    amount: 1200.00,
-    receiver_upi_id: 'merchant@upi',
-    status: 'PENDING',
-    created_at: new Date(Date.now() - 60000).toISOString(),
-    pending_at: new Date(Date.now() - 30000).toISOString(),
-  }
-];
-
 export function MockDataProvider({ children }: { children: ReactNode }) {
   const [merchant, setMerchant] = useState<Merchant | null>(null);
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
-  const [allMerchants, setAllMerchants] = useState<Merchant[]>([MOCK_MERCHANT]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [allMerchants, setAllMerchants] = useState<Merchant[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Simulate login persistence
-  useEffect(() => {
-    const stored = localStorage.getItem('chargepay_user_role');
-    if (stored === 'ADMIN') {
-      setMerchant(MOCK_ADMIN);
-    } else if (stored === 'MERCHANT') {
-      setMerchant(MOCK_MERCHANT);
+  const refreshProfile = useCallback(async () => {
+    const token = api.getToken();
+    if (!token) {
+      setMerchant(null);
+      setIsLoading(false);
+      return;
     }
+
+    const { data, error } = await api.getProfile();
+    if (error) {
+      api.setToken(null);
+      setMerchant(null);
+    } else {
+      setMerchant({
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        business_name: data.business_name,
+        api_key: data.api_key,
+        logo_url: data.logo_path || '',
+        kyc_status: data.kyc_status,
+        kyc_pan_path: data.kyc_pan_path,
+        kyc_aadhaar_path: data.kyc_aadhaar_path,
+        domains: data.domains || [],
+        role: data.role,
+      });
+    }
+    setIsLoading(false);
   }, []);
 
-  const login = async (email: string) => {
-    // Simple mock login logic
-    if (email.includes('admin')) {
-      setMerchant(MOCK_ADMIN);
-      localStorage.setItem('chargepay_user_role', 'ADMIN');
-      toast({ title: "Admin Access", description: "Logged in as Administrator." });
-    } else {
-      setMerchant(MOCK_MERCHANT);
-      localStorage.setItem('chargepay_user_role', 'MERCHANT');
-      toast({ title: "Welcome back", description: "Logged in successfully." });
+  const refreshOrders = useCallback(async () => {
+    if (!merchant) return;
+    
+    const { data, error } = await api.getOrders();
+    if (!error && data) {
+      setOrders(data.map((o: any) => ({
+        ...o,
+        status: o.status === 'EXPIRED' ? 'FAILED' : o.status,
+      })));
     }
+  }, [merchant]);
+
+  const refreshAdminData = useCallback(async () => {
+    if (!merchant || merchant.role !== 'ADMIN') return;
+    
+    const { data, error } = await api.getAdminMerchants();
+    if (!error && data) {
+      setAllMerchants(data.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        business_name: m.business_name,
+        api_key: '',
+        logo_url: '',
+        kyc_status: m.kyc_status,
+        domains: [],
+        role: 'MERCHANT' as const,
+      })));
+    }
+  }, [merchant]);
+
+  useEffect(() => {
+    refreshProfile();
+  }, [refreshProfile]);
+
+  useEffect(() => {
+    if (merchant) {
+      refreshOrders();
+      if (merchant.role === 'ADMIN') {
+        refreshAdminData();
+      }
+    }
+  }, [merchant, refreshOrders, refreshAdminData]);
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    const { data, error } = await api.login(email, password);
+    
+    if (error) {
+      toast({ title: "Login Failed", description: error, variant: "destructive" });
+      return false;
+    }
+    
+    if (data) {
+      api.setToken(data.token);
+      setMerchant({
+        id: data.merchant.id,
+        name: data.merchant.name,
+        email: data.merchant.email,
+        business_name: data.merchant.business_name,
+        api_key: '',
+        logo_url: data.merchant.logo_path || '',
+        kyc_status: data.merchant.kyc_status,
+        domains: [],
+        role: data.merchant.role,
+      });
+      toast({ title: "Welcome back", description: "Logged in successfully." });
+      return true;
+    }
+    
+    return false;
+  };
+
+  const register = async (data: { name: string; email: string; password: string; business_name: string }): Promise<boolean> => {
+    const { data: result, error } = await api.register(data);
+    
+    if (error) {
+      toast({ title: "Registration Failed", description: error, variant: "destructive" });
+      return false;
+    }
+    
+    if (result) {
+      api.setToken(result.token);
+      setMerchant({
+        id: result.merchant.id,
+        name: result.merchant.name,
+        email: result.merchant.email,
+        business_name: result.merchant.business_name,
+        api_key: result.merchant.api_key,
+        api_secret: result.merchant.api_secret,
+        logo_url: '',
+        kyc_status: 'NOT_UPLOADED',
+        domains: [],
+        role: result.merchant.role,
+      });
+      toast({ title: "Account Created", description: "Welcome to ChargePay!" });
+      return true;
+    }
+    
+    return false;
   };
 
   const logout = () => {
+    api.setToken(null);
     setMerchant(null);
-    localStorage.removeItem('chargepay_user_role');
+    setOrders([]);
+    setAllMerchants([]);
     toast({ title: "Logged out", description: "See you soon." });
   };
 
-  const createOrder = async (amount: number, name: string, mobile: string): Promise<Order> => {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 600));
-    
-    const newOrder: Order = {
-      order_id: Math.floor(1000000000 + Math.random() * 9000000000).toString(),
-      merchant_id: merchant?.id || 'm_guest',
+  const createOrder = async (amount: number, name: string, mobile: string, upiId: string = 'merchant@okicici'): Promise<Order> => {
+    const { data, error } = await api.createOrder({
       customer_name: name,
       customer_mobile: mobile,
-      amount: amount,
-      receiver_upi_id: 'merchant@okicici',
-      status: 'CREATED',
-      created_at: new Date().toISOString(),
+      amount,
+      receiver_upi_id: upiId,
+    });
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      throw new Error(error);
+    }
+    
+    const newOrder: Order = {
+      order_id: data!.order_id,
+      merchant_id: merchant?.id || '',
+      customer_name: name,
+      customer_mobile: mobile,
+      amount,
+      receiver_upi_id: upiId,
+      status: data!.status as OrderStatus,
+      created_at: data!.created_at,
+      upi_intent_url: data!.upi_intent_url,
     };
-
+    
     setOrders(prev => [newOrder, ...prev]);
     return newOrder;
   };
 
-  const uploadQR = (orderId: string) => {
-    setOrders(prev => prev.map(o => {
-      if (o.order_id === orderId && o.status === 'CREATED') {
-        return { ...o, status: 'PENDING', pending_at: new Date().toISOString() };
-      }
-      return o;
-    }));
+  const uploadQR = async (orderId: string) => {
+    const { error } = await api.uploadQR(orderId);
+    
+    if (!error) {
+      setOrders(prev => prev.map(o => {
+        if (o.order_id === orderId && o.status === 'CREATED') {
+          return { ...o, status: 'PENDING' as OrderStatus, pending_at: new Date().toISOString() };
+        }
+        return o;
+      }));
+    }
   };
 
-  const simulatePayment = (orderId: string) => {
-    setOrders(prev => prev.map(o => {
-      if (o.order_id === orderId) {
-         toast({ title: "Payment Received", description: `Order #${orderId} marked as COMPLETED.` });
-        return { ...o, status: 'COMPLETED', completed_at: new Date().toISOString() };
+  const simulatePayment = async (orderId: string) => {
+    const notification = {
+      'android.title': `Test User paid you ₹1.00`,
+      'android.text': orderId,
+      'android.bigText': orderId,
+    };
+    
+    const { data, error } = await api.sendNotification(notification);
+    
+    if (!error && data) {
+      if (data.status === 'COMPLETED') {
+        setOrders(prev => prev.map(o => {
+          if (o.order_id === orderId) {
+            toast({ title: "Payment Received", description: `Order #${orderId} marked as COMPLETED.` });
+            return { ...o, status: 'COMPLETED' as OrderStatus, completed_at: new Date().toISOString() };
+          }
+          return o;
+        }));
+      } else {
+        toast({ title: "Payment Status", description: data.message });
       }
-      return o;
-    }));
+    }
   };
 
   const simulateExpiry = (orderId: string) => {
     setOrders(prev => prev.map(o => {
       if (o.order_id === orderId && o.status === 'PENDING') {
-        return { ...o, status: 'EXPIRED', expired_at: new Date().toISOString() };
+        return { ...o, status: 'FAILED' as OrderStatus, expired_at: new Date().toISOString() };
       }
       return o;
     }));
@@ -203,45 +286,118 @@ export function MockDataProvider({ children }: { children: ReactNode }) {
 
   const getOrder = (orderId: string) => orders.find(o => o.order_id === orderId);
 
-  const addDomain = (domain: string) => {
+  const addDomain = async (domain: string) => {
+    const { data, error } = await api.addDomain(domain);
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      return;
+    }
+    
     if (merchant) {
-      const updatedMerchant = { ...merchant, domains: [...merchant.domains, domain] };
-      setMerchant(updatedMerchant);
-      // Also update in allMerchants list if it exists there
-      setAllMerchants(prev => prev.map(m => m.id === merchant.id ? updatedMerchant : m));
+      setMerchant({
+        ...merchant,
+        domains: [...merchant.domains, { id: data.id, domain: data.domain }],
+      });
       toast({ title: "Domain Added", description: `${domain} has been whitelisted.` });
     }
   };
 
-  const removeDomain = (domain: string) => {
+  const removeDomain = async (domainId: string) => {
+    const { error } = await api.removeDomain(domainId);
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      return;
+    }
+    
     if (merchant) {
-      const updatedMerchant = { ...merchant, domains: merchant.domains.filter(d => d !== domain) };
-      setMerchant(updatedMerchant);
-      setAllMerchants(prev => prev.map(m => m.id === merchant.id ? updatedMerchant : m));
-      toast({ title: "Domain Removed", description: `${domain} has been removed.` });
+      setMerchant({
+        ...merchant,
+        domains: merchant.domains.filter(d => d.id !== domainId),
+      });
+      toast({ title: "Domain Removed", description: "Domain has been removed." });
+    }
+  };
+
+  const regenerateKeys = async () => {
+    const { data, error } = await api.regenerateKeys();
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      return null;
+    }
+    
+    if (data && merchant) {
+      setMerchant({
+        ...merchant,
+        api_key: data.api_key,
+        api_secret: data.api_secret,
+      });
+      toast({ title: "Keys Regenerated", description: "Your API keys have been regenerated. Save the new secret!" });
+      return data;
+    }
+    
+    return null;
+  };
+
+  const uploadLogo = async (file: File) => {
+    const { data, error } = await api.uploadLogo(file);
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      return;
+    }
+    
+    if (merchant && data) {
+      setMerchant({ ...merchant, logo_url: data.logo_path });
+      toast({ title: "Logo Uploaded", description: "Your merchant logo has been updated." });
+    }
+  };
+
+  const uploadKycPan = async (file: File) => {
+    const { error } = await api.uploadKycPan(file);
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      return;
+    }
+    
+    if (merchant) {
+      setMerchant({ ...merchant, kyc_pan_path: true, kyc_status: 'PENDING' });
+      toast({ title: "PAN Uploaded", description: "Your PAN card has been submitted for verification." });
+    }
+  };
+
+  const uploadKycAadhaar = async (file: File) => {
+    const { error } = await api.uploadKycAadhaar(file);
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      return;
+    }
+    
+    if (merchant) {
+      setMerchant({ ...merchant, kyc_aadhaar_path: true, kyc_status: 'PENDING' });
+      toast({ title: "Aadhaar Uploaded", description: "Your Aadhaar card has been submitted for verification." });
     }
   };
 
   const createMerchant = async (data: Partial<Merchant>) => {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    const newMerchant: Merchant = {
-      id: `m_${nanoid(6)}`,
-      name: data.name || 'New Merchant',
-      email: data.email || 'new@example.com',
-      business_name: data.business_name || 'New Business',
-      api_key: `cp_live_${nanoid(10)}`,
-      api_secret: `sk_live_${nanoid(20)}`,
-      logo_url: '',
-      kyc_status: 'PENDING',
-      domains: [],
-      role: 'MERCHANT'
-    };
-    setAllMerchants(prev => [...prev, newMerchant]);
-    toast({ title: "Merchant Created", description: "New merchant account added successfully." });
+    toast({ title: "Info", description: "Admin merchant creation via API is available." });
   };
 
-  const updateKYCStatus = (merchantId: string, status: Merchant['kyc_status']) => {
-    setAllMerchants(prev => prev.map(m => m.id === merchantId ? { ...m, kyc_status: status } : m));
+  const updateKYCStatus = async (merchantId: string, status: Merchant['kyc_status']) => {
+    const { error } = await api.updateKycStatus(merchantId, status);
+    
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+      return;
+    }
+    
+    setAllMerchants(prev => prev.map(m => 
+      m.id === merchantId ? { ...m, kyc_status: status } : m
+    ));
     toast({ title: "Status Updated", description: `Merchant KYC status updated to ${status}` });
   };
 
@@ -250,17 +406,26 @@ export function MockDataProvider({ children }: { children: ReactNode }) {
       merchant, 
       orders, 
       allMerchants,
+      isLoading,
       login, 
+      register,
       logout, 
       createOrder, 
       uploadQR,
       simulatePayment,
       simulateExpiry,
       getOrder,
+      refreshOrders,
       addDomain,
       removeDomain,
+      regenerateKeys,
+      uploadLogo,
+      uploadKycPan,
+      uploadKycAadhaar,
       createMerchant,
-      updateKYCStatus
+      updateKYCStatus,
+      refreshProfile,
+      refreshAdminData,
     }}>
       {children}
     </MockDataContext.Provider>
