@@ -70,16 +70,15 @@ export class DatabaseStorage implements IStorage {
   async createMerchant(merchantData: InsertMerchant): Promise<Merchant> {
     const apiKey = `cp_live_${crypto.randomBytes(16).toString('hex')}`;
     const apiSecret = crypto.randomBytes(32).toString('hex');
-    const apiSecretHash = crypto.createHash('sha256').update(apiSecret).digest('hex');
     
     const [merchant] = await db.insert(merchants).values({
       ...merchantData,
       email: merchantData.email.toLowerCase(),
       api_key: apiKey,
-      api_secret_hash: apiSecretHash,
+      api_secret: apiSecret,
     }).returning();
     
-    return { ...merchant, api_secret_hash: apiSecret };
+    return merchant;
   }
 
   async updateMerchant(id: string, data: Partial<Merchant>): Promise<Merchant | undefined> {

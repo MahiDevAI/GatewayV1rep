@@ -65,8 +65,8 @@ export function generateHmacSignature(apiSecret: string, body: string): string {
   return crypto.createHmac('sha256', apiSecret).update(body).digest('hex');
 }
 
-export function verifyHmacSignature(apiSecretHash: string, body: string, providedSignature: string): boolean {
-  const expectedSignature = crypto.createHmac('sha256', apiSecretHash).update(body).digest('hex');
+export function verifyHmacSignature(apiSecret: string, body: string, providedSignature: string): boolean {
+  const expectedSignature = crypto.createHmac('sha256', apiSecret).update(body).digest('hex');
   return crypto.timingSafeEqual(
     Buffer.from(expectedSignature, 'hex'),
     Buffer.from(providedSignature, 'hex')
@@ -142,7 +142,7 @@ export async function apiKeyAuthMiddleware(req: Request, res: Response, next: Ne
   const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
   
   try {
-    const isValid = verifyHmacSignature(merchant.api_secret_hash!, rawBody, signature);
+    const isValid = verifyHmacSignature(merchant.api_secret!, rawBody, signature);
     if (!isValid) {
       return res.status(401).json({ message: 'Invalid signature' });
     }
@@ -221,9 +221,8 @@ export async function logAudit(
   }
 }
 
-export function regenerateApiKeys(): { apiKey: string; apiSecret: string; apiSecretHash: string } {
+export function regenerateApiKeys(): { apiKey: string; apiSecret: string } {
   const apiKey = `cp_live_${crypto.randomBytes(16).toString('hex')}`;
   const apiSecret = crypto.randomBytes(32).toString('hex');
-  const apiSecretHash = crypto.createHash('sha256').update(apiSecret).digest('hex');
-  return { apiKey, apiSecret, apiSecretHash };
+  return { apiKey, apiSecret };
 }

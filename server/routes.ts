@@ -169,7 +169,7 @@ export async function registerRoutes(
           business_name: merchant.business_name,
           role: merchant.role,
           api_key: merchant.api_key,
-          api_secret: merchant.api_secret_hash,
+          api_secret: merchant.api_secret,
         },
       });
     } catch (error: any) {
@@ -368,11 +368,11 @@ export async function registerRoutes(
 
   app.post('/api/merchant/regenerate-keys', authMiddleware, async (req: Request, res: Response) => {
     try {
-      const { apiKey, apiSecret, apiSecretHash } = regenerateApiKeys();
+      const { apiKey, apiSecret } = regenerateApiKeys();
       
       await storage.updateMerchant(req.merchant!.id, {
         api_key: apiKey,
-        api_secret_hash: apiSecretHash,
+        api_secret: apiSecret,
       });
       
       await logAudit(req.merchant!.email, req.merchant!.id, 'API_KEY_REGENERATE', {}, req.ip);

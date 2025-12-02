@@ -17,7 +17,7 @@ export const merchants = pgTable("merchants", {
   business_name: text("business_name").notNull(),
   phone: text("phone"),
   api_key: text("api_key").unique(),
-  api_secret_hash: text("api_secret_hash"), // HMAC secret (hashed)
+  api_secret: text("api_secret"), // HMAC secret (stored for signature verification)
   logo_path: text("logo_path"),
   kyc_pan_path: text("kyc_pan_path"),
   kyc_aadhaar_path: text("kyc_aadhaar_path"),
@@ -92,7 +92,7 @@ export const insertMerchantSchema = createInsertSchema(merchants, {
   created_at: true,
   updated_at: true,
   api_key: true,
-  api_secret_hash: true,
+  api_secret: true,
 });
 
 export const insertDomainSchema = createInsertSchema(merchant_domains, {
